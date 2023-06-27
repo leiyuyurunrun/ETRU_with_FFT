@@ -1,6 +1,6 @@
-﻿
+
 #include <iostream>
-#include<cmath>// 这里明明是三角函数需要啊，还是传的版本有误，再说。
+#include<cmath>// FFT中单位根要用
 #include<string>
 #include<vector>
 #include<algorithm>//shuffle需要,如果非要省时间，同时去了也行
@@ -9,9 +9,9 @@
 using namespace std;
 
 const double Pi = acos(-1.0);
-const int MAXN = 3e3 + 10;
+const int MAXN = 3e3;
 
-class EI;
+class EI;  //因为这两个类涉及相互转换，转换函数都是先声明后定义在外了，其余都是定义在内的
 class Complex
 {
     double x, y;
@@ -28,7 +28,36 @@ public:
     Complex interge_division(const int& p)const { return Complex(x / p, y / p); }
     bool operator == (const Complex& a) const { return a.get_x() == x && a.get_y() == y; }
     EI to_EI();
-
+    friend ostream& operator << (ostream& out, const Complex& alpha) {
+        string s = alpha.stringComplex();
+        return out << s;
+    }
+    string const stringComplex()const {
+        string result = "";
+        double a = x, b = y;
+        if (a != 0) {
+            result += to_string(a);
+            if (b == 1)
+                result += "+i";
+            else if (b == -1)
+                result += "-i";
+            else if (b > 0)
+                result += "+" + to_string(b) + "i";
+            else if (b < 0)
+                result += to_string(b) + "i";
+        }
+        else {
+            if (b == 0)
+                result = "0";  // 留着空也行，输出多项式的时候再看要不要输出
+            else if (b == 1)
+                result = "i";
+            else if (b == -1)
+                result = "-i";
+            else
+                result = to_string(b) + "";
+        }
+        return result;
+    }
 }C[MAXN], D[MAXN];
 int r[MAXN];
 class EI
@@ -177,8 +206,7 @@ Complex EI::to_complex() {
 }
 
 
-class Poly
-{
+class Poly {
     vector<EI> poly;//vector的==靠的是定义的结构体，即因为重载了EI的==，这里poly是可以直接判断相等的
     static int N;
 public:
@@ -249,7 +277,7 @@ public:
         }
     }
 
-    Poly multiplication_FFT(const Poly& P, const EI& p) const {//FFT在主函数调用太多就会说长度太长，计算不了，因此目前只在Poly这个类的除法以及外层test_inverse_and_multiplications中调用。如果在ETRU类中调用FFT调用几次会计算算不动了。
+    Poly multiplication_FFT_little(const Poly& P, const EI& p) const {//新加了fft，这下在转回之前截断了，这样执行时间又少一些，
         Poly result, A, B;
         A.poly = poly;
         B.poly = P.poly;
@@ -286,23 +314,31 @@ public:
         }
         FFT(C, 1, limit);//转FFT
         FFT(D, 1, limit);
-        for (int i = 0; i <= limit; i++) C[i] = C[i] * D[i];
+        for (int i = 0; i <= limit; i++) C[i] = C[i] * D[i];//其实我特想在这里就开辟另一个简化的思路，但是最后回去的limit怎么处理呢，如果这里能实现的话，那么速度提升将不止一丁半点。
         FFT(C, -1, limit);//逆FFT
+
         int len = len_standard - 1;
-        for (int i = 0; i < len; i++) {  // 转换爱森斯坦系数并并取模
-            result.poly.push_back(C[i].interge_division(limit).to_EI() % p);
-        }
-        if (result.poly.size() >= N) {//截断
-            int len = result.poly.size();
+        if (len > N) {
             for (int i = N; i < len; i++) {
-                result.poly[i] = result.poly[i] + result.poly[i - N];
-                result.poly[i] = result.poly[i] % p;
+                C[i] = C[i] + C[i - N];
             }
-            for (int i = N; i < len; i++)
-                result.poly.erase(result.poly.begin());
+            for (int i = 0; i < N; i++) {  // 转换爱森斯坦系数并并取模
+                result.poly.push_back(C[len - N + i].interge_division(limit).to_EI() % p);
+            }
         }
+        else {
+            for (int i = 0; i < len; i++) {  // 转换爱森斯坦系数并并取模
+                result.poly.push_back(C[i].interge_division(limit).to_EI() % p);
+            }
+        }
+        while (result.poly[0] == EI(0)) {//去0
+            result.poly.erase(result.poly.begin());
+        }
+
         return result;
     }
+
+
 
     Poly multiplication_with_EI(const EI& b, const EI& p)const {
         Poly result;
@@ -469,7 +505,7 @@ public:
             quotientAndRemainder = A.division(B, p);
             if (quotientAndRemainder.first == Zero && quotientAndRemainder.second == Zero)
                 return make_pair(false, Zero);
-            newer = old.subtraction(quotientAndRemainder.first.multiplication_convolution(neww, p), p);
+            newer = old.subtraction(quotientAndRemainder.first.multiplication_FFT_little(neww, p), p);
             A = B, B = quotientAndRemainder.second;
             old = neww, neww = newer;
         }
@@ -484,7 +520,7 @@ public:
         }
     }
 
-    void translation_and_output()const {//写在Poly里就不用传参了
+    void translation_and_output()const {
         vector<EI>input = this->poly;
         vector<int>binary;
         int len_ = input.size();
@@ -493,7 +529,7 @@ public:
             binary.push_back(input[i].get_b());
         }
         if (input.back().get_b() == 1) {
-            binary.push_back(input.back().get_a());  //好像这么做浪费了
+            binary.push_back(input.back().get_a());
         }
         len_ = binary.size();
         while (len_ % 7) {
@@ -512,10 +548,8 @@ public:
             }
             cout << (char)ASCII;
         }
-        cout << "————————————" << endl;
     }
 };
-
 int Poly::N = 3;
 
 Poly translation_to_Poly(string s) {//觉得不是poly的行为，所以放外面了
@@ -602,9 +636,9 @@ public:
         }
         Poly Fq = inverse1.second;
         Poly Fp = inverse2.second;
-        Poly h = Fq.multiplication_convolution(g, q);
+        Poly h = Fq.multiplication_FFT_little(g, q);
         vector<Poly> result;
-        /*while (h.get_poly()[0] == EI(0)) {//只看公钥大小的话，没必要在keygen里去除先导0，测试了一下大概会消耗500ms+，但是在d很大的时候公钥长度带来的缩小不明显，所以还是注释掉了
+        /*while (h.get_poly()[0] == EI(0)) {
             h.delete_front();
         }
         while (Fp.get_poly()[0] == EI(0)) {
@@ -622,13 +656,13 @@ public:
     Poly Encrypt(Poly pk, bool isPoly = false) {
         if (isPoly)
             random = sample_T();//如果是进行字符串的interface，由于转写的poly不满足Lf.Lg，因此为解密必须让随机random的长度小一些，否则解密失败。而如果是标准形式的poly，则对应的random也应该是标准的Lf,Lg
-        Poly e = plaintext.addition(random.multiplication_convolution(pk, q).multiplication_with_EI(p, q), q);
+        Poly e = plaintext.addition(random.multiplication_FFT_little(pk, q).multiplication_with_EI(p, q), q);
         return e;
     }
 
     Poly Decrypt(Poly e, Poly sk, Poly Fp) {
-        Poly a = sk.multiplication_convolution(e, q);
-        Poly b = Fp.multiplication_convolution(a, p);
+        Poly a = sk.multiplication_FFT_little(e, q);
+        Poly b = Fp.multiplication_FFT_little(a, p);
         int len = b.get_poly().size();
         while (b.get_poly()[0] == EI(0)) {
             b.delete_front();
@@ -653,7 +687,7 @@ void interface_with_data() {
     getline(cin, s);
     Poly m;
     m = translation_to_Poly(s);
-    cout << endl << "请输入550以下的数，600百分之百会vector太长而报错，400的话概率较小报错" << endl << "示例：400" << endl;
+    cout << endl << "请输入550以下的数，800会vector太长而报错，400的话概率较小报错" << endl << "示例：400" << endl;
     cin >> N;
     cout << "请输入d，建议d<N/11" << endl;
     cin >> d;
@@ -672,8 +706,8 @@ void interface_with_data() {
     Fp = keys[2];
     cout << "公钥对应的多项式是：" << h << endl;
     Poly cipertext = demo.Encrypt(h);
-    cout << endl<<"明文是" << m << endl;
-    cout << endl<<"密文是：" << cipertext << endl << endl;
+    cout << endl << "明文是" << m << endl;
+    cout << endl << "密文是：" << cipertext << endl << endl;
     Poly afterDecryption = demo.Decrypt(cipertext, f, Fp);
     bool success = demo.Verify(afterDecryption);
     if (success) {
@@ -689,7 +723,7 @@ void keyGen_only() {//无交互，只生产密钥，如果不可逆，求逆失�
     int N, a, b, d;
     EI p, q;
     string s;
-    cout << endl << "请输入N" << endl << "示例：400" << endl;
+    cout << endl << "请输入N，可以试着输700以下，" << endl << "示例：400" << endl;
     cin >> N;
     cout << "请输入d，建议d<N/11" << endl;
     cin >> d;
@@ -705,8 +739,9 @@ void keyGen_only() {//无交互，只生产密钥，如果不可逆，求逆失�
     vector<Poly> keys = demo.KeyGen();
     end = clock();
     cout << "————密钥产生完毕————" << endl;
-    cout << "公钥对应的多项式是：" << keys[0] << endl;
     cout << "产生时间是：" << end - start << endl;
+    cout << "公钥对应的多项式是：" << keys[0] << endl;
+
 }
 
 
@@ -715,7 +750,7 @@ void interface_with_polynomial() {
     int N, a, b, d;
     EI p, q;
     string s;
-    cout << endl << "请输入550以下的数，否则会vector太长而报错" << endl << "示例：400" << endl;
+    cout << endl << "请输入700以下的数，" << endl << "示例：400" << endl;
     cin >> N;
     cout << "请输入d，建议d<N/11" << endl;
     cin >> d;
@@ -777,7 +812,7 @@ void test_inverse_and_multiplications() {//验证多项式逆以及三种乘法
     cout << "——————三种多项式乘法的验证——————" << endl << "多项式1是：" << sample << endl << "多项式2是" << sample2 << endl;
     cout << "截断乘法的结果是：" << endl << sample.multiplication_normal(sample2, p) << endl;
     cout << "卷积分两类计算的结果是：" << endl << sample.multiplication_convolution(sample2, p) << endl;
-    cout << "卷积分两类计算的结果是：" << endl << sample.multiplication_FFT(sample2, p) << endl;
+    cout << "fft计算的结果是：" << endl << sample.multiplication_FFT_little(sample2, p) << endl;
     cout << "—————————亲爱的同学，请你看看他们仨相等码？完结撒花———————————";
 }
 
@@ -797,6 +832,8 @@ void test_EI_to_Complex() {//爱森斯坦数到虚数再到爱森斯坦数的测
     cout << "最初的爱森斯坦数是：" << demo << "转换回来的爱森斯坦数是：" << t << endl;
 }
 
+
+
 int main() {
-    interface_with_data();
+    keyGen_only();
 }
