@@ -34,7 +34,7 @@ multiplication_normal(), multiplication_convolution(), multiplicaiton_FFT()
 ```
 
 如果想比较运行时间的话，可以在cpp文件中Ctrl+F搜索：
-`newer = old.subtraction(quotientAndRemainder.first.multiplication_convolution(neww, p), p);`该行语句落位在这个函数：`polyInverse(Poly P, EI p)`内；
+```newer = old.subtraction(quotientAndRemainder.first.multiplication_convolution(neww, p), p);```该行语句落位在这个函数：`polyInverse(Poly P, EI p)`内；
 
 只要把`multiplication_convolution`换成`multiplication_FFT`，或者换成`multiplication_normal，然后在main中运行`keyGen_only()`，即可观察不同算法的求逆时间，需要指出的是normal算法下，N不宜大（<100），否则会运行好长时间出不来.FFT的算法是初步的版本，只有在达到N在600+的时候才能感受到很明显的加速效果。
 
