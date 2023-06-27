@@ -1,6 +1,6 @@
 ﻿
 #include <iostream>
-#include<cmath>// round需要，如果嫌弃用，自己定义也行
+#include<cmath>// 这里明明是三角函数需要啊，还是传的版本有误，再说。
 #include<string>
 #include<vector>
 #include<algorithm>//shuffle需要,如果非要省时间，同时去了也行
